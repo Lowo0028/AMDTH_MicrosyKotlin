@@ -1,0 +1,175 @@
+package com.example.orden.orden.service;
+
+import com.example.orden.orden.Client.UsuarioClient;
+import com.example.orden.orden.model.ItemOrden;
+import com.example.orden.orden.model.Orden;
+import com.example.orden.orden.repository.ItemOrdenRepository;
+import com.example.orden.orden.repository.OrdenRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class OrdenServiceTest {
+
+    @Mock
+    private OrdenRepository ordenRepository;
+
+    @Mock
+    private ItemOrdenRepository itemOrdenRepository;
+
+    @Mock
+    private UsuarioClient usuarioClient;
+
+    @InjectMocks
+    private OrdenService ordenService;
+
+    private Map<String, Object> usuarioMock;
+
+    @BeforeEach
+    void setUp() {
+        usuarioMock = Map.of("id", 1, "nombre", "Juan");
+    }
+
+    @Test
+    void obtenerOrdenesPorUsuario_exito() {
+        when(usuarioClient.obtenerUsuarioPorId(1L)).thenReturn(usuarioMock);
+        when(ordenRepository.findByUsuarioIdOrderByCreatedAtDesc(1L))
+                .thenReturn(List.of(new Orden()));
+
+        List<Orden> result = ordenService.obtenerOrdenesPorUsuario(1L);
+
+        assertFalse(result.isEmpty());
+        verify(ordenRepository).findByUsuarioIdOrderByCreatedAtDesc(1L);
+    }
+
+    @Test
+    void obtenerOrdenesPorUsuario_usuarioNoExiste() {
+        when(usuarioClient.obtenerUsuarioPorId(1L)).thenReturn(null);
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> ordenService.obtenerOrdenesPorUsuario(1L)
+        );
+
+        assertEquals("Usuario no encontrado", ex.getMessage());
+    }
+
+    @Test
+    void obtenerItemsDeOrden_exito() {
+        when(ordenRepository.existsById(1L)).thenReturn(true);
+        when(itemOrdenRepository.findByOrdenId(1L))
+                .thenReturn(List.of(new ItemOrden()));
+
+        List<ItemOrden> result = ordenService.obtenerItemsDeOrden(1L);
+
+        assertFalse(result.isEmpty());
+    }
+
+    @Test
+    void obtenerItemsDeOrden_ordenNoExiste() {
+        when(ordenRepository.existsById(1L)).thenReturn(false);
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> ordenService.obtenerItemsDeOrden(1L)
+        );
+
+        assertEquals("Orden no encontrada", ex.getMessage());
+    }
+
+    @Test
+    void crearOrden_exito() {
+        ItemOrden item = new ItemOrden();
+        item.setProductoId(10L);
+        List<ItemOrden> items = List.of(item);
+
+        Orden orden = new Orden();
+        orden.setId(5L);
+
+        when(usuarioClient.obtenerUsuarioPorId(1L)).thenReturn(usuarioMock);
+        when(ordenRepository.save(any())).thenReturn(orden);
+
+        Orden result = ordenService.crearOrden(1L, 25000.0, items);
+
+        assertNotNull(result);
+        assertEquals(5L, result.getId());
+        verify(itemOrdenRepository).saveAll(any());
+    }
+
+    @Test
+    void crearOrden_usuarioNoExiste() {
+        when(usuarioClient.obtenerUsuarioPorId(1L)).thenReturn(null);
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> ordenService.crearOrden(1L, 25000.0, List.of(new ItemOrden()))
+        );
+
+        assertEquals("Usuario no encontrado", ex.getMessage());
+    }
+
+    @Test
+    void crearOrden_itemsVacios() {
+        when(usuarioClient.obtenerUsuarioPorId(1L)).thenReturn(usuarioMock);
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> ordenService.crearOrden(1L, 25000.0, List.of())
+        );
+
+        assertEquals("La orden debe tener al menos un item", ex.getMessage());
+    }
+
+    @Test
+    void obtenerDetallesOrden_exito() {
+        Orden orden = new Orden();
+        orden.setId(1L);
+
+        when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+        when(itemOrdenRepository.findByOrdenId(1L)).thenReturn(List.of(new ItemOrden()));
+
+        Map<String, Object> result = ordenService.obtenerDetallesOrden(1L);
+
+        assertTrue(result.containsKey("orden"));
+        assertTrue(result.containsKey("items"));
+        assertTrue(result.containsKey("cantidadItems"));
+    }
+
+    @Test
+    void cancelarOrden_exito() {
+        Orden orden = new Orden();
+        orden.setId(1L);
+        orden.setStatus("Completada");
+
+        when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+        when(ordenRepository.save(any())).thenReturn(orden);
+
+        Orden result = ordenService.cancelarOrden(1L);
+
+        assertEquals("Cancelada", result.getStatus());
+    }
+
+    @Test
+    void cancelarOrden_yaCancelada() {
+        Orden orden = new Orden();
+        orden.setStatus("Cancelada");
+
+        when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> ordenService.cancelarOrden(1L)
+        );
+
+        assertEquals("La orden ya está cancelada", ex.getMessage());
+    }
+}
